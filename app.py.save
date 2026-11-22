@@ -1,0 +1,634 @@
+import streamlit as st
+from healthy_food_nutrition_management_system.crew import HealthyFoodNutritionManagementSystemCrew
+from healthy_food_nutrition_management_system.pdf_generator import MealPlanPDFGenerator
+import time
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
+
+# Page config
+st.set_page_config(
+    page_title="AI Meal Planner",
+    page_icon="🍽️",
+    layout="wide"
+)
+
+# Translations dictionary
+TRANSLATIONS = {
+    'en': {
+        'title': '🍽️ AI-Powered Meal Planning System',
+        'subtitle': '✨ Transform Your Health with Personalized Nutrition Plans ✨',
+        'settings': '⚙️ Settings',
+        'select_language': '🌍 Select Your Language',
+        'choose_goal': '📋 Choose Your Goal',
+        'weight_loss': '🎯 Weight Loss',
+        'muscle_building': '💪 Muscle Building',
+        'vegan': '🌱 Vegan',
+        'keto': '🥑 Keto',
+        'diabetes': '💉 Diabetes',
+        'custom': '✏️ Custom',
+        'enter_custom': '✍️ Enter your custom goal:',
+        'tip': '💡 Tip: Generation takes 3-5 minutes',
+        'your_plan': '📝 Your Personalized Meal Plan',
+        'success': '✅ Meal plan generated successfully!',
+        'configure': '👈 Configure your settings on the left and click "Generate" below',
+        'downloads': '📄 Your Downloads',
+        'no_pdfs': '📭 No PDFs yet. Generate your first one!',
+        'generate_button': '🚀 GENERATE MY MEAL PLAN',
+        'email_button': '📧 EMAIL ME THIS PLAN',
+        'enter_email': 'Enter your email address:',
+        'email_success': '✅ Email sent successfully!',
+        'email_error': '❌ Failed to send email. Please download the PDF instead.',
+        'select_goal_error': '❌ Please select a goal or enter a custom topic!',
+        'generating': '✨ Creating your personalized meal plan...',
+        'step1': '🔍 Step 1: Researching recipes...',
+        'step2': '📋 Step 2: Creating your meal plan...',
+        'step3': '🎨 Step 3: Formatting beautiful PDF...',
+        'complete': '✅ Complete!',
+        'success_msg': '🎉 Success! Your meal plan is ready!',
+        'pdf_saved': '📄 PDF saved:',
+        'rate_limit': '⏳ Rate limit reached. Please wait 2-3 minutes and try again.',
+        'rate_limit_tip': '💡 Tip: The free tier has limits. Try a simpler topic or upgrade to premium.',
+        'features': ['9 Languages', 'AI-Powered', 'Detailed PDFs', 'Instant Results'],
+        'what_you_get': '🌟 What You\'ll Get:',
+        'benefit1': '✅ 7-Day Complete Plan (Mon-Sun)',
+        'benefit2': '✅ Calorie Breakdown',
+        'benefit3': '✅ Nutrition Facts',
+        'benefit4': '✅ Shopping List Ready',
+        'benefit5': '✅ Easy to Follow',
+        'benefit6': '✅ Professional PDF'
+    },
+    'fr': {
+        'title': '🍽️ Système de Planification de Repas Alimenté par l\'IA',
+        'subtitle': '✨ Transformez Votre Santé avec des Plans Nutritionnels Personnalisés ✨',
+        'settings': '⚙️ Paramètres',
+        'select_language': '🌍 Sélectionnez Votre Langue',
+        'choose_goal': '📋 Choisissez Votre Objectif',
+        'weight_loss': '🎯 Perte de Poids',
+        'muscle_building': '💪 Prise de Muscle',
+        'vegan': '🌱 Végétalien',
+        'keto': '🥑 Keto',
+        'diabetes': '💉 Diabète',
+        'custom': '✏️ Personnalisé',
+        'enter_custom': '✍️ Entrez votre objectif personnalisé:',
+        'tip': '💡 Astuce: La génération prend 3-5 minutes',
+        'your_plan': '📝 Votre Plan de Repas Personnalisé',
+        'success': '✅ Plan de repas généré avec succès!',
+        'configure': '👈 Configurez vos paramètres à gauche et cliquez sur "Générer" ci-dessous',
+        'downloads': '📄 Vos Téléchargements',
+        'no_pdfs': '📭 Pas encore de PDF. Générez votre premier!',
+        'generate_button': '🚀 GÉNÉRER MON PLAN DE REPAS',
+        'email_button': '📧 M\'ENVOYER CE PLAN PAR EMAIL',
+        'enter_email': 'Entrez votre adresse email:',
+        'email_success': '✅ Email envoyé avec succès!',
+        'email_error': '❌ Échec de l\'envoi de l\'email. Veuillez télécharger le PDF.',
+        'select_goal_error': '❌ Veuillez sélectionner un objectif ou entrer un sujet personnalisé!',
+        'generating': '✨ Création de votre plan de repas personnalisé...',
+        'step1': '🔍 Étape 1: Recherche de recettes...',
+        'step2': '📋 Étape 2: Création de votre plan...',
+        'step3': '🎨 Étape 3: Formatage du PDF...',
+        'complete': '✅ Terminé!',
+        'success_msg': '🎉 Succès! Votre plan de repas est prêt!',
+        'pdf_saved': '📄 PDF sauvegardé:',
+        'rate_limit': '⏳ Limite de taux atteinte. Veuillez attendre 2-3 minutes.',
+        'rate_limit_tip': '💡 Astuce: Le niveau gratuit a des limites.',
+        'features': ['9 Langues', 'Alimenté par IA', 'PDFs Détaillés', 'Résultats Instantanés'],
+        'what_you_get': '🌟 Ce Que Vous Obtiendrez:',
+        'benefit1': '✅ Plan Complet de 7 Jours (Lun-Dim)',
+        'benefit2': '✅ Répartition des Calories',
+        'benefit3': '✅ Faits Nutritionnels',
+        'benefit4': '✅ Liste de Courses Prête',
+        'benefit5': '✅ Facile à Suivre',
+        'benefit6': '✅ PDF Professionnel'
+    },
+    'es': {
+        'title': '🍽️ Sistema de Planificación de Comidas con IA',
+        'subtitle': '✨ Transforma Tu Salud con Planes Nutricionales Personalizados ✨',
+        'settings': '⚙️ Configuración',
+        'select_language': '🌍 Selecciona Tu Idioma',
+        'choose_goal': '📋 Elige Tu Objetivo',
+        'weight_loss': '🎯 Pérdida de Peso',
+        'muscle_building': '💪 Construcción Muscular',
+        'vegan': '🌱 Vegano',
+        'keto': '🥑 Keto',
+        'diabetes': '💉 Diabetes',
+        'custom': '✏️ Personalizado',
+        'enter_custom': '✍️ Ingresa tu objetivo personalizado:',
+        'tip': '💡 Consejo: La generación toma 3-5 minutos',
+        'your_plan': '📝 Tu Plan de Comidas Personalizado',
+        'success': '✅ ¡Plan de comidas generado exitosamente!',
+        'configure': '👈 Configura tus ajustes a la izquierda y haz clic en "Generar" abajo',
+        'downloads': '📄 Tus Descargas',
+        'no_pdfs': '📭 Aún no hay PDFs. ¡Genera tu primero!',
+        'generate_button': '🚀 GENERAR MI PLAN DE COMIDAS',
+        'email_button': '📧 ENVIARME ESTE PLAN POR EMAIL',
+        'enter_email': 'Ingresa tu dirección de email:',
+        'email_success': '✅ ¡Email enviado exitosamente!',
+        'email_error': '❌ Error al enviar email. Por favor descarga el PDF.',
+        'select_goal_error': '❌ ¡Por favor selecciona un objetivo o ingresa un tema personalizado!',
+        'generating': '✨ Creando tu plan de comidas personalizado...',
+        'step1': '🔍 Paso 1: Investigando recetas...',
+        'step2': '📋 Paso 2: Creando tu plan...',
+        'step3': '🎨 Paso 3: Formateando PDF...',
+        'complete': '✅ ¡Completo!',
+        'success_msg': '🎉 ¡Éxito! ¡Tu plan de comidas está listo!',
+        'pdf_saved': '📄 PDF guardado:',
+        'rate_limit': '⏳ Límite alcanzado. Espera 2-3 minutos.',
+        'rate_limit_tip': '💡 Consejo: El nivel gratuito tiene límites.',
+        'features': ['9 Idiomas', 'Con IA', 'PDFs Detallados', 'Resultados Instantáneos'],
+        'what_you_get': '🌟 Lo Que Obtendrás:',
+        'benefit1': '✅ Plan Completo de 7 Días (Lun-Dom)',
+        'benefit2': '✅ Desglose de Calorías',
+        'benefit3': '✅ Datos Nutricionales',
+        'benefit4': '✅ Lista de Compras Lista',
+        'benefit5': '✅ Fácil de Seguir',
+        'benefit6': '✅ PDF Profesional'
+    },
+    'ar': {
+        'title': '🍽️ نظام تخطيط الوجبات بالذكاء الاصطناعي',
+        'subtitle': '✨ حوّل صحتك مع خطط التغذية الشخصية ✨',
+        'settings': '⚙️ الإعدادات',
+        'select_language': '🌍 اختر لغتك',
+        'choose_goal': '📋 اختر هدفك',
+        'weight_loss': '🎯 فقدان الوزن',
+        'muscle_building': '💪 بناء العضلات',
+        'vegan': '🌱 نباتي',
+        'keto': '🥑 كيتو',
+        'diabetes': '💉 السكري',
+        'custom': '✏️ مخصص',
+        'enter_custom': '✍️ أدخل هدفك المخصص:',
+        'tip': '💡 نصيحة: التوليد يستغرق 3-5 دقائق',
+        'your_plan': '📝 خطة وجباتك الشخصية',
+        'success': '✅ تم إنشاء خطة الوجبات بنجاح!',
+        'configure': '👈 قم بتكوين إعداداتك على اليسار وانقر على "توليد" أدناه',
+        'downloads': '📄 تنزيلاتك',
+        'no_pdfs': '📭 لا توجد ملفات PDF بعد. قم بإنشاء أول واحد!',
+        'generate_button': '🚀 توليد خطة وجباتي',
+        'email_button': '📧 أرسل لي هذه الخطة',
+        'enter_email': 'أدخل عنوان بريدك الإلكتروني:',
+        'email_success': '✅ تم إرسال البريد الإلكتروني بنجاح!',
+        'email_error': '❌ فشل إرسال البريد. يرجى تنزيل PDF.',
+        'select_goal_error': '❌ يرجى اختيار هدف أو إدخال موضوع مخصص!',
+        'generating': '✨ إنشاء خطة وجباتك الشخصية...',
+        'step1': '🔍 الخطوة 1: البحث عن الوصفات...',
+        'step2': '📋 الخطوة 2: إنشاء خطتك...',
+        'step3': '🎨 الخطوة 3: تنسيق PDF...',
+        'complete': '✅ اكتمل!',
+        'success_msg': '🎉 نجاح! خطة وجباتك جاهزة!',
+        'pdf_saved': '📄 تم حفظ PDF:',
+        'rate_limit': '⏳ تم الوصول إلى الحد. انتظر 2-3 دقائق.',
+        'rate_limit_tip': '💡 نصيحة: المستوى المجاني له حدود.',
+        'features': ['9 لغات', 'بالذكاء الاصطناعي', 'ملفات PDF مفصلة', 'نتائج فورية'],
+        'what_you_get': '🌟 ما ستحصل عليه:',
+        'benefit1': '✅ خطة كاملة لمدة 7 أيام (الاثنين-الأحد)',
+        'benefit2': '✅ تفصيل السعرات الحرارية',
+        'benefit3': '✅ حقائق غذائية',
+        'benefit4': '✅ قائمة تسوق جاهزة',
+        'benefit5': '✅ سهل المتابعة',
+        'benefit6': '✅ PDF احترافي'
+    },
+    'de': {
+        'title': '🍽️ KI-gestütztes Essensplanungssystem',
+        'subtitle': '✨ Verwandeln Sie Ihre Gesundheit mit personalisierten Ernährungsplänen ✨',
+        'settings': '⚙️ Einstellungen',
+        'select_language': '🌍 Wählen Sie Ihre Sprache',
+        'choose_goal': '📋 Wählen Sie Ihr Ziel',
+        'weight_loss': '🎯 Gewichtsabnahme',
+        'muscle_building': '💪 Muskelaufbau',
+        'vegan': '🌱 Vegan',
+        'keto': '🥑 Keto',
+        'diabetes': '💉 Diabetes',
+        'custom': '✏️ Benutzerdefiniert',
+        'enter_custom': '✍️ Geben Sie Ihr benutzerdefiniertes Ziel ein:',
+        'tip': '💡 Tipp: Die Generierung dauert 3-5 Minuten',
+        'your_plan': '📝 Ihr Persönlicher Essensplan',
+        'success': '✅ Essensplan erfolgreich erstellt!',
+        'configure': '👈 Konfigurieren Sie Ihre Einstellungen links und klicken Sie unten auf "Generieren"',
+        'downloads': '📄 Ihre Downloads',
+        'no_pdfs': '📭 Noch keine PDFs. Erstellen Sie Ihre erste!',
+        'generate_button': '🚀 MEINEN ESSENSPLAN GENERIEREN',
+        'email_button': '📧 DIESEN PLAN PER E-MAIL SENDEN',
+        'enter_email': 'Geben Sie Ihre E-Mail-Adresse ein:',
+        'email_success': '✅ E-Mail erfolgreich gesendet!',
+        'email_error': '❌ E-Mail-Versand fehlgeschlagen. Bitte laden Sie das PDF herunter.',
+        'select_goal_error': '❌ Bitte wählen Sie ein Ziel oder geben Sie ein benutzerdefiniertes Thema ein!',
+        'generating': '✨ Erstelle Ihren personalisierten Essensplan...',
+        'step1': '🔍 Schritt 1: Rezepte recherchieren...',
+        'step2': '📋 Schritt 2: Plan erstellen...',
+        'step3': '🎨 Schritt 3: PDF formatieren...',
+        'complete': '✅ Fertig!',
+        'success_msg': '🎉 Erfolg! Ihr Essensplan ist fertig!',
+        'pdf_saved': '📄 PDF gespeichert:',
+        'rate_limit': '⏳ Ratenlimit erreicht. Bitte warten Sie 2-3 Minuten.',
+        'rate_limit_tip': '💡 Tipp: Die kostenlose Stufe hat Limits.',
+        'features': ['9 Sprachen', 'KI-gestützt', 'Detaillierte PDFs', 'Sofortige Ergebnisse'],
+        'what_you_get': '🌟 Was Sie Erhalten:',
+        'benefit1': '✅ Kompletter 7-Tage-Plan (Mo-So)',
+        'benefit2': '✅ Kalorienaufschlüsselung',
+        'benefit3': '✅ Nährwertangaben',
+        'benefit4': '✅ Einkaufsliste fertig',
+        'benefit5': '✅ Einfach zu folgen',
+        'benefit6': '✅ Professionelles PDF'
+    },
+    'it': {
+        'title': '🍽️ Sistema di Pianificazione Pasti con IA',
+        'subtitle': '✨ Trasforma la Tua Salute con Piani Nutrizionali Personalizzati ✨',
+        'settings': '⚙️ Impostazioni',
+        'select_language': '🌍 Seleziona la Tua Lingua',
+        'choose_goal': '📋 Scegli il Tuo Obiettivo',
+        'weight_loss': '🎯 Perdita di Peso',
+        'muscle_building': '💪 Costruzione Muscolare',
+        'vegan': '🌱 Vegano',
+        'keto': '🥑 Keto',
+        'diabetes': '💉 Diabete',
+        'custom': '✏️ Personalizzato',
+        'enter_custom': '✍️ Inserisci il tuo obiettivo personalizzato:',
+        'tip': '💡 Suggerimento: La generazione richiede 3-5 minuti',
+        'your_plan': '📝 Il Tuo Piano Pasti Personalizzato',
+        'success': '✅ Piano pasti generato con successo!',
+        'configure': '👈 Configura le impostazioni a sinistra e clicca su "Genera" sotto',
+        'downloads': '📄 I Tuoi Download',
+        'no_pdfs': '📭 Nessun PDF ancora. Genera il tuo primo!',
+        'generate_button': '🚀 GENERA IL MIO PIANO PASTI',
+        'email_button': '📧 INVIAMI QUESTO PIANO',
+        'enter_email': 'Inserisci il tuo indirizzo email:',
+        'email_success': '✅ Email inviata con successo!',
+        'email_error': '❌ Invio email fallito. Scarica il PDF.',
+        'select_goal_error': '❌ Seleziona un obiettivo o inserisci un argomento personalizzato!',
+        'generating': '✨ Creazione del tuo piano pasti personalizzato...',
+        'step1': '🔍 Passo 1: Ricerca ricette...',
+        'step2': '📋 Passo 2: Creazione piano...',
+        'step3': '🎨 Passo 3: Formattazione PDF...',
+        'complete': '✅ Completato!',
+        'success_msg': '🎉 Successo! Il tuo piano pasti è pronto!',
+        'pdf_saved': '📄 PDF salvato:',
+        'rate_limit': '⏳ Limite raggiunto. Attendi 2-3 minuti.',
+        'rate_limit_tip': '💡 Suggerimento: Il livello gratuito ha limiti.',
+        'features': ['9 Lingue', 'Con IA', 'PDF Dettagliati', 'Risultati Istantanei'],
+        'what_you_get': '🌟 Cosa Otterrai:',
+        'benefit1': '✅ Piano Completo di 7 Giorni (Lun-Dom)',
+        'benefit2': '✅ Ripartizione Calorie',
+        'benefit3': '✅ Fatti Nutrizionali',
+        'benefit4': '✅ Lista Spesa Pronta',
+        'benefit5': '✅ Facile da Seguire',
+        'benefit6': '✅ PDF Professionale'
+    },
+    'ko': {
+        'title': '🍽️ AI 기반 식단 계획 시스템',
+        'subtitle': '✨ 맞춤형 영양 계획으로 건강을 변화시키세요 ✨',
+        'settings': '⚙️ 설정',
+        'select_language': '🌍 언어 선택',
+        'choose_goal': '📋 목표 선택',
+        'weight_loss': '🎯 체중 감량',
+        'muscle_building': '💪 근육 증가',
+        'vegan': '🌱 비건',
+        'keto': '🥑 케토',
+        'diabetes': '💉 당뇨병',
+        'custom': '✏️ 사용자 정의',
+        'enter_custom': '✍️ 사용자 정의 목표 입력:',
+        'tip': '💡 팁: 생성에 3-5분 소요',
+        'your_plan': '📝 맞춤형 식단 계획',
+        'success': '✅ 식단 계획이 성공적으로 생성되었습니다!',
+        'configure': '👈 왼쪽에서 설정을 구성하고 아래 "생성" 클릭',
+        'downloads': '📄 다운로드',
+        'no_pdfs': '📭 아직 PDF가 없습니다. 첫 번째를 생성하세요!',
+        'generate_button': '🚀 내 식단 계획 생성',
+        'email_button': '📧 이메일로 받기',
+        'enter_email': '이메일 주소 입력:',
+        'email_success': '✅ 이메일이 성공적으로 전송되었습니다!',
+        'email_error': '❌ 이메일 전송 실패. PDF를 다운로드하세요.',
+        'select_goal_error': '❌ 목표를 선택하거나 사용자 정의 주제를 입력하세요!',
+        'generating': '✨ 맞춤형 식단 계획 생성 중...',
+        'step1': '🔍 1단계: 레시피 조사 중...',
+        'step2': '📋 2단계: 계획 생성 중...',
+        'step3': '🎨 3단계: PDF 포맷 중...',
+        'complete': '✅ 완료!',
+        'success_msg': '🎉 성공! 식단 계획이 준비되었습니다!',
+        'pdf_saved': '📄 PDF 저장됨:',
+        'rate_limit': '⏳ 한도 도달. 2-3분 대기하세요.',
+        'rate_limit_tip': '💡 팁: 무료 등급에는 제한이 있습니다.',
+        'features': ['9개 언어', 'AI 기반', '상세 PDF', '즉시 결과'],
+        'what_you_get': '🌟 제공 내용:',
+        'benefit1': '✅ 7일 완전 계획 (월-일)',
+        'benefit2': '✅ 칼로리 분석',
+        'benefit3': '✅ 영양 정보',
+        'benefit4': '✅ 쇼핑 목록 준비',
+        'benefit5': '✅ 쉽게 따라하기',
+        'benefit6': '✅ 전문 PDF'
+    },
+    'zh': {
+        'title': '🍽️ AI驱动的膳食计划系统',
+        'subtitle': '✨ 通过个性化营养计划改变您的健康 ✨',
+        'settings': '⚙️ 设置',
+        'select_language': '🌍 选择语言',
+        'choose_goal': '📋 选择目标',
+        'weight_loss': '🎯 减肥',
+        'muscle_building': '💪 增肌',
+        'vegan': '🌱 素食',
+        'keto': '🥑 生酮',
+        'diabetes': '💉 糖尿病',
+        'custom': '✏️ 自定义',
+        'enter_custom': '✍️ 输入自定义目标:',
+        'tip': '💡 提示: 生成需要3-5分钟',
+        'your_plan': '📝 您的个性化膳食计划',
+        'success': '✅ 膳食计划生成成功!',
+        'configure': '👈 在左侧配置设置，然后点击下面的"生成"',
+        'downloads': '📄 您的下载',
+        'no_pdfs': '📭 还没有PDF。生成您的第一个!',
+        'generate_button': '🚀 生成我的膳食计划',
+        'email_button': '📧 发送到邮箱',
+        'enter_email': '输入您的电子邮件地址:',
+        'email_success': '✅ 电子邮件发送成功!',
+        'email_error': '❌ 电子邮件发送失败。请下载PDF。',
+        'select_goal_error': '❌ 请选择目标或输入自定义主题!',
+        'generating': '✨ 正在创建您的个性化膳食计划...',
+        'step1': '🔍 第1步: 研究食谱...',
+        'step2': '📋 第2步: 创建计划...',
+        'step3': '🎨 第3步: 格式化PDF...',
+        'complete': '✅ 完成!',
+        'success_msg': '🎉 成功! 您的膳食计划已准备好!',
+        'pdf_saved': '📄 PDF已保存:',
+        'rate_limit': '⏳ 达到限制。请等待2-3分钟。',
+        'rate_limit_tip': '💡 提示: 免费层有限制。',
+        'features': ['9种语言', 'AI驱动', '详细PDF', '即时结果'],
+        'what_you_get': '🌟 您将获得:',
+        'benefit1': '✅ 7天完整计划 (周一-周日)',
+        'benefit2': '✅ 卡路里分解',
+        'benefit3': '✅ 营养事实',
+        'benefit4': '✅ 购物清单准备',
+        'benefit5': '✅ 易于遵循',
+        'benefit6': '✅ 专业PDF'
+    },
+    'ja': {
+        'title': '🍽️ AI搭載の食事計画システム',
+        'subtitle': '✨ パーソナライズされた栄養計画で健康を変革 ✨',
+        'settings': '⚙️ 設定',
+        'select_language': '🌍 言語を選択',
+        'choose_goal': '📋 目標を選択',
+        'weight_loss': '🎯 減量',
+        'muscle_building': '💪 筋肉増強',
+        'vegan': '🌱 ビーガン',
+        'keto': '🥑 ケト',
+        'diabetes': '💉 糖尿病',
+        'custom': '✏️ カスタム',
+        'enter_custom': '✍️ カスタム目標を入力:',
+        'tip': '💡 ヒント: 生成には3-5分かかります',
+        'your_plan': '📝 あなたのパーソナライズされた食事計画',
+        'success': '✅ 食事計画が正常に生成されました!',
+        'configure': '👈 左側で設定を構成し、下の「生成」をクリック',
+        'downloads': '📄 ダウンロード',
+        'no_pdfs': '📭 まだPDFがありません。最初のものを生成してください!',
+        'generate_button': '🚀 私の食事計画を生成',
+        'email_button': '📧 メールで送信',
+        'enter_email': 'メールアドレスを入力:',
+        'email_success': '✅ メールが正常に送信されました!',
+        'email_error': '❌ メール送信に失敗しました。PDFをダウンロードしてください。',
+        'select_goal_error': '❌ 目標を選択するか、カスタムトピックを入力してください!',
+        'generating': '✨ パーソナライズされた食事計画を作成中...',
+        'step1': '🔍 ステップ1: レシピを調査中...',
+        'step2': '📋 ステップ2: 計画を作成中...',
+        'step3': '🎨 ステップ3: PDFをフォーマット中...',
+        'complete': '✅ 完了!',
+        'success_msg': '🎉 成功! 食事計画の準備ができました!',
+        'pdf_saved': '📄 PDF保存済み:',
+        'rate_limit': '⏳ 制限に達しました。2-3分待ってください。',
+        'rate_limit_tip': '💡 ヒント: 無料プランには制限があります。',
+        'features': ['9言語', 'AI搭載', '詳細PDF', '即座の結果'],
+        'what_you_get': '🌟 あなたが得るもの:',
+        'benefit1': '✅ 7日間完全計画 (月-日)',
+        'benefit2': '✅ カロリー内訳',
+        'benefit3': '✅ 栄養事実',
+        'benefit4': '✅ 買い物リスト準備済み',
+        'benefit5': '✅ フォローしやすい',
+        'benefit6': '✅ プロフェッショナルPDF',
+       }}
+st.markdown(
+    """
+    <style>
+    body {
+        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+    }
+
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Language selection with callback
+st.markdown(f"### {get_text(st.session_state.language, 'select_language')}")
+
+language_options = {
+    'en': '🇬🇧 English',
+    'fr': '🇫🇷 Français',
+    'es': '🇪🇸 Español',
+    'ar': '🇲🇦 العربية',
+    'de': '🇩🇪 Deutsch',
+    'it': '🇮🇹 Italiano',
+    'ko': '🇰🇷 한국어',
+    'zh': '🇨🇳 中文',
+    'ja': '🇯🇵 日本語'
+}
+
+selected_language = st.selectbox(
+    "",
+    options=list(language_options.keys()),
+    format_func=lambda x: language_options[x],
+    index=list(language_options.keys()).index(st.session_state.language),
+    key="language_selector",
+    label_visibility="collapsed"
+)
+
+# Update session state when language changes
+if selected_language != st.session_state.language:
+    st.session_state.language = selected_language
+    st.rerun()
+
+st.markdown("---")
+
+# Topic selection
+st.markdown(f"### {get_text(st.session_state.language, 'choose_goal')}")
+
+topic_presets = {
+    'en': {
+        get_text('en', 'weight_loss'): 'healthy meal planning for weight loss',
+        get_text('en', 'muscle_building'): 'high protein meals for muscle building',
+        get_text('en', 'vegan'): 'vegan meal planning',
+        get_text('en', 'keto'): 'keto low carb meal planning',
+        get_text('en', 'diabetes'): 'diabetes-friendly meal planning',
+        get_text('en', 'custom'): ''
+    },
+    'fr': {
+        get_text('fr', 'weight_loss'): 'planification de repas sains pour la perte de poids',
+        get_text('fr', 'muscle_building'): 'repas riches en protéines pour la musculation',
+        get_text('fr', 'vegan'): 'planification de repas végétaliens',
+        get_text('fr', 'keto'): 'planification keto faible en glucides',
+        get_text('fr', 'diabetes'): 'planification pour diabétiques',
+        get_text('fr', 'custom'): ''
+    },
+    'es': {
+        get_text('es', 'weight_loss'): 'planificación de comidas para perder peso',
+        get_text('es', 'muscle_building'): 'comidas ricas en proteínas',
+        get_text('es', 'vegan'): 'planificación de comidas veganas',
+        get_text('es', 'keto'): 'planificación keto baja en carbohidratos',
+        get_text('es', 'diabetes'): 'planificación para diabéticos',
+        get_text('es', 'custom'): ''
+    },
+    'ar': {
+        get_text('ar', 'weight_loss'): 'تخطيط وجبات صحية لفقدان الوزن',
+        get_text('ar', 'muscle_building'): 'وجبات عالية البروتين',
+        get_text('ar', 'vegan'): 'تخطيط وجبات نباتية',
+        get_text('ar', 'keto'): 'تخطيط وجبات كيتو',
+        get_text('ar', 'diabetes'): 'تخطيط وجبات للسكري',
+        get_text('ar', 'custom'): ''
+    },
+    'de': {
+        get_text('de', 'weight_loss'): 'gesunde Essensplanung zur Gewichtsabnahme',
+        get_text('de', 'muscle_building'): 'proteinreiche Mahlzeiten',
+        get_text('de', 'vegan'): 'vegane Essensplanung',
+        get_text('de', 'keto'): 'Keto kohlenhydratarme Planung',
+        get_text('de', 'diabetes'): 'Diabetes-freundliche Planung',
+        get_text('de', 'custom'): ''
+    },
+    'it': {
+        get_text('it', 'weight_loss'): 'pianificazione pasti per perdita di peso',
+        get_text('it', 'muscle_building'): 'pasti ricchi di proteine',
+        get_text('it', 'vegan'): 'pianificazione pasti vegani',
+        get_text('it', 'keto'): 'pianificazione pasti keto',
+        get_text('it', 'diabetes'): 'pianificazione per diabetici',
+        get_text('it', 'custom'): ''
+    },
+    'ko': {
+        get_text('ko', 'weight_loss'): '체중 감량을 위한 식단',
+        get_text('ko', 'muscle_building'): '고단백 식단',
+        get_text('ko', 'vegan'): '비건 식단',
+        get_text('ko', 'keto'): '케토 식단',
+        get_text('ko', 'diabetes'): '당뇨병 식단',
+        get_text('ko', 'custom'): ''
+    },
+    'zh': {
+        get_text('zh', 'weight_loss'): '健康减肥膳食计划',
+        get_text('zh', 'muscle_building'): '高蛋白增肌膳食',
+        get_text('zh', 'vegan'): '素食膳食计划',
+        get_text('zh', 'keto'): '生酮膳食计划',
+        get_text('zh', 'diabetes'): '糖尿病膳食',
+        get_text('zh', 'custom'): ''
+    },
+    'ja': {
+        get_text('ja', 'weight_loss'): '減量のための食事計画',
+        get_text('ja', 'muscle_building'): '高タンパク質食',
+        get_text('ja', 'vegan'): 'ビーガン食事計画',
+        get_text('ja', 'keto'): 'ケト食事計画',
+        get_text('ja', 'diabetes'): '糖尿病食事計画',
+        get_text('ja', 'custom'): ''
+    }
+}
+
+presets = topic_presets.get(st.session_state.language, topic_presets['en'])
+topic_choice = st.selectbox("", options=list(presets.keys()), label_visibility="collapsed")
+
+if get_text(st.session_state.language, 'custom') in topic_choice:
+    topic = st.text_input(get_text(st.session_state.language, 'enter_custom'))
+else:
+    topic = presets[topic_choice]
+
+st.markdown("---")
+st.info(get_text(st.session_state.language, 'tip'))
+ 
+if 'result' in st.session_state and 'pdf_path' in st.session_state:
+    st.success(get_text(st.session_state.language, 'success'))
+    st.text_area("", st.session_state.result, height=400, label_visibility="collapsed")
+    
+    # Email button
+    with st.expander("📧 " + get_text(st.session_state.language, 'email_button')):
+        user_email = st.text_input(get_text(st.session_state.language, 'enter_email'))
+        if st.button(get_text(st.session_state.language, 'email_button')):
+            if user_email:
+                try:
+                    # Note: This is a placeholder - you need to configure SMTP
+                    st.info("📧 Email functionality requires SMTP configuration. Please download the PDF instead.")
+                    st.info(f"💡 Your PDF is at: {st.session_state.pdf_path}")
+                except:
+                    st.error(get_text(st.session_state.language, 'email_error'))
+            else:
+                st.warning("Please enter an email address")
+else:
+    st.info(get_text(st.session_state.language, 'configure'))
+    
+    # Benefits
+    st.markdown(f"#### {get_text(st.session_state.language, 'what_you_get')}")
+    for i in range(1, 7):
+        st.markdown(get_text(st.session_state.language, f'benefit{i}'))
+output_dir = "output"
+if os.path.exists(output_dir):
+    pdf_files = [f for f in os.listdir(output_dir) if f.endswith('.pdf')]
+    
+    if pdf_files:
+        pdf_files.sort(reverse=True)
+        
+        for pdf_file in pdf_files[:5]:
+            file_path = os.path.join(output_dir, pdf_file)
+            
+            with open(file_path, "rb") as f:
+                st.download_button(
+                    label=f"📥 {pdf_file[:25]}...",
+                    data=f,
+                    file_name=pdf_file,
+                    mime="application/pdf",
+                    key=pdf_file,
+                    use_container_width=True
+                )
+    else:
+        st.info(get_text(st.session_state.language, 'no_pdfs'))
+else:
+    st.info(get_text(st.session_state.language, 'no_pdfs'))
+progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+           
+                time.sleep(0.5)
+                
+                inputs = {'topic': topic}
+                result = crew_instance.crew().kickoff(inputs=inputs)
+                
+                status_text.markdown(f"### {get_text(st.session_state.language, 'step2')}")
+                progress_bar.progress(60)
+                time.sleep(0.5)
+                
+                pdf_generator = MealPlanPDFGenerator(language=st.session_state.language)
+                pdf_path = pdf_generator.generate_pdf(str(result), topic)
+                
+                status_text.markdown(f"### {get_text(st.session_state.language, 'step3')}")
+                progress_bar.progress(90)
+                time.sleep(0.5)
+                
+                status_text.markdown(f"### {get_text(st.session_state.language, 'complete')}")
+                progress_bar.progress(100)
+                
+                st.session_state.result = str(result)
+                st.session_state.pdf_path = pdf_path
+                
+                st.balloons()
+                st.success(get_text(st.session_state.language, 'success_msg'))
+                st.info(f"{get_text(st.session_state.language, 'pdf_saved')} {pdf_path}")
+                
+                time.sleep(2)
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                
+                if 'rate_limit' in str(e).lower() or 'too large' in str(e).lower():
+                    st.warning(get_text(st.session_state.language, 'rate_limit'))
+                    st.info(get_text(st.session_state.language, 'rate_limit_tip'))
+
+
